@@ -1,0 +1,824 @@
+제 116 회 석사학위논문
+지 도 교 수 손 봉 수
+관심 컨투어의 추출을 위한
+혼합 가속화 방법에 대한 연구
+Hybrid Acceleration for Interest-based
+Contour Component Extraction
+중앙대학교 대학원
+컴퓨터공학과 컴퓨터공학 전공
+진 량 보
+2012년 2월
+관심 컨투어의 추출을 위한
+혼합 가속화 방법에 대한 연구
+Hybrid Acceleration for Interest-based
+Contour Component Extraction
+이 논문을 석사학위 논문으로 제출함
+2012년 2월
+중앙대학교 대학원
+컴퓨터공학과 컴퓨터공학 전공
+진 량 보
+진량보의 석사학위 논문을 인정함
+심 사 위 원 장 인
+심 사 위 원 인
+심 사 위 원 인
+중앙대학교 대학원
+2012년 2월
+Contents
+1 Introduction 1
+2 ROI Computation 5
+2.1 Background Research . . . . . . . . . . . . . . . . . . . . . . . . 5
+2.2 Contour Tree . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+2.2.1 Contour Tree Construction . . . . . . . . . . . . . . . . . 6
+2.2.2 Branch Decomposition & Contour Tree Simpliﬁcation . . 8
+2.3 Contour Property Computation . . . . . . . . . . . . . . . . . . . 8
+3 Concurrent Contour Propagation 11
+3.1 Background Research . . . . . . . . . . . . . . . . . . . . . . . . 12
+3.2 Concurrent Propagation . . . . . . . . . . . . . . . . . . . . . . . 12
+3.2.1 Usage of Local Queue . . . . . . . . . . . . . . . . . . . 14
+3.2.2 Postprocessing . . . . . . . . . . . . . . . . . . . . . . . 15
+4 GPU-based Triangulation 17
+4.1 Background Research . . . . . . . . . . . . . . . . . . . . . . . . 18
+4.1.1 Parallel Contour Extraction Methods . . . . . . . . . . . . 19
+4.1.2 Parallelism in CUDA Infrastructure . . . . . . . . . . . . 20
+4.2 Active Cell Triangulation . . . . . . . . . . . . . . . . . . . . . . 21
+4.3 VBO-based Rendering . . . . . . . . . . . . . . . . . . . . . . . 23
+5 Results 24
+5.1 Propagation Performance . . . . . . . . . . . . . . . . . . . . . . 25
+5.2 Triangulation Performance . . . . . . . . . . . . . . . . . . . . . 28
+6 Conclusions and Future Works 33
+i
+List of Figures
+1.1 Overall Workﬂow . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+2.1 Contour tree mapped to 3D volume data . . . . . . . . . . . . . . 7
+2.2 Interactive contour tree simpliﬁcation . . . . . . . . . . . . . . . 8
+3.1 Illustration of contour propagation . . . . . . . . . . . . . . . . . 11
+3.2 A typical model of contour propagation in parallel . . . . . . . . . 16
+4.1 Cell triangulation . . . . . . . . . . . . . . . . . . . . . . . . . . 17
+4.2 Difference between CPU and GPU in parallel computing . . . . . 18
+4.3 CUDA Execution Model . . . . . . . . . . . . . . . . . . . . . . 21
+5.1 Performance comparison with the original method . . . . . . . . . 24
+5.2 Region of interest in scaned kidney data . . . . . . . . . . . . . . 25
+5.3 Engine image data with color-tags for threads . . . . . . . . . . . 26
+5.4 Comparison between shaded and color-tagged model . . . . . . . 26
+5.5 Multi-threading Contour Propagation Performance . . . . . . . . 27
+5.6 Final results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 31
+5.7 Final results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+ii
+List of Tables
+3.1 Comparison of sequential and parallel scan generation . . . . . . 16
+5.1 Performance Analyzing Table . . . . . . . . . . . . . . . . . . . 30
+iii
+List of Algorithms
+1 Parallel propagate function . . . . . . . . . . . . . . . . . . . . . . 13
+2 Dequeue function . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+3 Enqueue function . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+iv
+Chapter 1
+Introduction
+Medical imaging, which is used to create images of the human body for clinical
+purposes, plays an important role in medicine. And when a set of images is cap-
+tured, 3-dimensional volume data can be made. Many applications were made to
+visualize the volume either by volume rendering [6] or marching cubes [13] al-
+gorithms. And these application were further developed to emphasis the visualize
+interest-based areas in the volume. Typical designs were made by C.L. Bajaj. et
+al. for designing the contour spectrum [1], which is used for ﬁnding important iso-
+contours. And on the other hand, G. Kindlmann et al.[11] designed proper transfer
+function to provide better view of direct volume rendering, so that medical appli-
+cations are made possible. And in recent years, these methods could be carried
+out with GPU acceleration [12], which is lower in cost but far more efﬁcient in
+computing and rendering.
+However, contours extracted using the marching cubes method won’t deliver a
+clean image of a 3D surface. The output usually contains some noisy contours that
+might block the region of interest. To satisfy the need of analyzing the volume and
+extracting clean 3-dimensional mesh, contour tree [19] is introduced and heav-
+1
+ily used as the abstraction of the 3D images. And then surface can be traversed
+starting from a group of seed cells by propagating through neighboring cells using
+adjacency and intersection information.
+Although both structured and unstructured meshes can be analyzed using the
+contour tree structure, noisy data such as MRI and CT scans can cause the algo-
+rithm to produce large numbers of seed cells, which would cost longer preprocess-
+ing time. To solve this problem, H. Carr et al. [4] proposed a tree simpliﬁcation
+method to reduce branches by local geometric measures, while V. Pascucci et al.
+[16] introduced a branch decomposition method with 3-dimensional presentation
+of contour tree. The branch decomposition algorithm aims to represent every arc
+appears in exactly one branch. Following this rule, except the root branch, all
+branches in the tree connects one leaf to an interior node of another branch. Then
+apply valid simpliﬁcation function to peel off branches. This approach would re-
+sult in a hierarchical representation of the contour tree. Later, J. Zhou et al.[20]
+improved this approach with different geometric measures and result in improved
+more reasonable simpliﬁed layout.
+The central idea of contour propagation is that, when found neighboring cells
+intersect with the initial cell (seed cell), put them into a queue so that more neigh-
+boring cells can be reached with the same queue. A difﬁcult portion in this al-
+gorithm lies in locating and triangulate the neighboring cells. And for irregular
+meshes, this could be efﬁcient to trace by performing a breadth-ﬁrst search in the
+graph of cell adjacencies.
+There are two major contributions in this thesis. Firstly, for improving the
+speed of contour propagation, we applied our parallel algorithm to take the ad-
+vantage of modern multi-core processor. This stage is proceeded in CPU mainly
+because of the queue-based contour propagation algorithm. And we generate a
+2
+compact array, which contains the size of triangles, for parallel triangulation during
+the process. Secondly, with the help of the precomputed compact array, we pro-
+posed a GPU-accelerated method for triangulate the active cells and render them
+immediately after triangulation. Advantages of this method will be described in
+Chapter 4.
+The basic idea for computing contour propagation in parallel is inspired by the
+task stealing method[14], which provides load balancing while compromise data
+locality. The starvation of a thread can be solved by stealing a seed cell from the
+tail of another instance, therefore, each thread could preserve locality of its seed
+cell queue.
+With the combination of seed cells collected from the above parallel compu-
+tation, all tetrahedral cells are triangulated in GPU. The algorithm improve the
+efﬁciency of computing by avoiding visiting cells without intersection with given
+isovalue and directly rendering triangulated mesh after GPU triangulate execution.
+The overall workﬂow that how our program process the 3-dimensional vol-
+ume data is given in Figure 1.1. The computation of contour tree is considered
+to be the preprocessing stage. And in the interactive stage, regions of interest are
+selected using an interface to extract the contour using the proposed hybrid accel-
+erated method. This highly depends on a simpliﬁcation process of contour tree to
+visualize noisy biomedical data.
+The rest of the thesis is organized as follows. The method we used for ﬁnding
+Region of Interest, most of which are previous works, are described in Chapter 2.
+And then a hybrid accelerated method for propagating the contour and triangulat-
+ing active cells is introduced in Chapter 3 and Chapter 4 respectively. Chapter 5
+describes the experiment environment and presents the results. Final, a summary
+of the thesis and the conclusions are drawn in Chapter 6.
+3
+Preprocessing
+Interactive
+3D volume data
+Contour Tree
+Simplified Contour Tree
+Surface Mesh
+Propagation
+Triangulation
+Hybrid
+Extraction
+Figure 1.1: Overall Workﬂow
+4
+Chapter 2
+ROI Computation
+This chapter describes the region of interest computation method, most of which
+focused on the preprocessing of 3-dimensional volume data, which aims to ﬁnd out
+the topological structure. In our approach, contour tree is used as the abstraction
+of the volume data. Although this won’t be good when the input data is noisy, fast
+contour extraction method depends on the generated seed set during preprocess-
+ing. And when applied simpliﬁcation methods, it won’t be hard to ﬁnd signiﬁcant
+contour structures in the original volume.
+2.1 Background Research
+The concept of an ROI, which is a selected subset of samples in a image, is com-
+monly used in medical imaging. Typical application covers the dimension from
+2D image to volumetric data and time-varying volumes and focus on segmenting
+boundaries in an image or a volume.
+5
+2.2 Contour Tree
+H. Carr proposed the concept of ﬂexible isosurface [5] and the simpliﬁcation method
+to get clean output of isosurface mesh. There are several terms deﬁned in this work,
+such as path seeds and local geometric measures etc.
+The local geometric measures can be used to valid individual contours when
+simplifying the contour tree to a hierarchical structure. The basic measure is to
+use topological persistence, which is the difference in function value on an edge
+that connects a pair of critical points. Several other measures like surface area and
+integral volume are used for different usage.
+Contour tree for 3D images is introduced by M. Van Kreveld et al.[19] to im-
+prove the speed of isocontouring. The contour tree is further developed by H.
+Carr [3] to help the interactive exploration of multi-dimensional imaging data.
+It is widely used in various ﬁeld of study, including data compression, contour
+matching[17], GIS etc. And in various data dimension from 2D images, 3D vol-
+ume data and 4D time-varying volume.
+There are various implementations of computing Contour Tree from 2D/3D
+dataset. And among those implementations, H. Carr’s method is well-known and
+widely accepted as the general method, which takes O(N logN) in run-time for
+Contour Tree construction.
+2.2.1 Contour Tree Construction
+To generate the contour tree information, we follow the conventional method to
+create it in O(nlogn + tα(t)). We sort the intensity values of all voxels in the
+volume, sweep from high to low isovalues to construct join tree using union-ﬁnd
+structure[18] to determine connected components.
+6
+Figure 2.1: Contour tree mapped to 3D volume data
+The algorithm for computing contour tree described by H. Carr et al.[3] consist
+of the following four steps.
+1. Sort all n vertices of the mesh by their intensity values.
+2. Perform a sweep of the n vertices from lowest values to highest ones to
+construct join tree.
+3. Perform another sweep from a reverse direction to construct split tree.
+4. Merge the join tree and split tree and remove nodes that keep no topological
+changes.
+To track the individual contour components in the volume data, store edge in-
+formation as the seed during the construction of join tree. Then transfer it to the
+contour tree during the merge step of the algorithm. In the meanwhile, we generate
+one and only one seed for each contour depend on the contour tree information.
+This provides the information to manipulate and annotate individual contours in-
+teractively.
+In our implementation, the generated seed is stored with contour tree data ﬁle
+in volume data preprocessing stage. The information can be reused to generate
+simpliﬁed contour tree interactively as well.
+7
+2.2.2 Branch Decomposition & Contour Tree Simpliﬁcation
+V. Pascucci et al.[16] composed a multi-resolution data structure for representing
+the contour tree in a hierarchical layout and an algorithm to construct it.
+(a) coarse simpliﬁed 1 (b) coarse simpliﬁed 2 (c) ﬁne simpliﬁed
+Figure 2.2: Interactive contour tree simpliﬁcation
+We implemented the contour tree simpliﬁcation according to the persistence
+value of each branch, which is the length of the branch. Each saddle-extremum
+pair, whose persistence is below a given threshold is considered to be insigniﬁcant.
+Therefore, we remove the arc that is consider to be unimportant from the contour
+tree to discard the corresponding noisy structures. Besides, we present an interface
+that can provide threshold interactively to visualize simpliﬁed contour tree.
+2.3 Contour Property Computation
+C.L. Bajaj et al. [1] introduced contour spectrum, which provides global geomet-
+ric properties like surface area, volume and gradient integral of the contour. This
+work enables the identiﬁcation of important isovalues for guiding exploratory vi-
+sualization through a simple interface. V. Pascucci et al. [15] propagate topological
+indices along branches of the contour tree. H. Carr et al. [4] later deﬁned local
+8
+geometric measures for individual contours, such as surface area and contained
+volume.
+Surface Area Compuation Surface area implies the exposed area of a solid ob-
+ject. For instance, surface-area-to-volume ratio(SA:V) of a sphere is small. In
+the contrary, the SA:V ratio of many body parts, say brain, are very large due to
+infoldings, allowing higher rates of metabolism.
+We use the additivity property of the surface area add up non-overlap triangles
+of the surface.
+A(S) = A(S1)+···+A(Sr).
+Gradient Computation The gradient of a scalar function f(x1,x2,x3,...,xn) is
+denoted ∇ f. The notation grad(f) is also used for the gradient.
+∇ f =
+∂f
+∂x1
+,...,
+∂f
+∂xn
+.
+In 3-dimensional rectangular coordinates, this can be expanded to
+∇ f(x,y,z) =
+∂ f
+∂x
+,
+∂f
+∂y
+,
+∂ f
+∂z
+Therefore, for each triangle i, we compute the summation of normal vector length
+and divide it by the area.
+gi =
+|n1|+|n2|+|n3|
+3×area
+And the gradient of the contour component would be the average value of those
+triangles.
+G =
+∑n
+i=1 gi ×ai
+∑n
+i=1 ai
+9
+Volume Computation Complex shapes like brain surface can be calculated by
+integral calculus in the condition that a formula exists for the shape’s boundary.
+Since the procedure of building contour tree sweep every vertices in the volume
+and results in contour tree edges which represent for monotone structures. The
+summation of all the cells on the monotone structures, which are adjacent to each
+other on the same direction, is the volume corresponding to the contour tree edge.
+This is the information commonly used for estimating whether a contour is the
+region of interest.
+10
+Chapter 3
+Concurrent Contour Propagation
+In this chapter, we describe a novel algorithm to propagate an individual contour
+from a single seed. The seed is generated during the preprocessing stage while
+constructing the contour tree. It is difﬁcult to propagate a large contour using a
+parallel method because it’s hard to predict the direction and position the contour.
+Therefore, we describe our algorithm in this chapter as the main contribution of
+the thesis.
+A
+D
+C
+B
+Action:Queue:
+A
+B C
+Dequeue A
+Extract Contour
+Enqueue B,C
+Repeat
+Figure 3.1: Illustration of contour propagation
+11
+3.1 Background Research
+In this thesis, we focus on extract the interactively selected large contour compo-
+nent while taking advantage of modern hardware. Conventional sequential extrac-
+tion method won’t meet our need for real-time interest-base contour component
+visualization.
+The commonly used method for propagating an individual contour is to com-
+pute the intersected neighboring cell by comparing vertex values with the given
+isovalue. Then push all the intersected neighboring cells into a queue so that those
+cell can be triangulated in later steps. For the case used in this thesis, 6 tetrahe-
+drons are divided from a single cube. Therefore, the intersected tetrahedron might
+be a tetrahedron in another cube.
+The problem we met to complete the contour propagation in a parallel way is
+how to implement the push and pop operations efﬁcient, while propagating from
+a single seed cell to all directions. A naive method that could be think about is to
+use a shared queue between all threads while all operations on the queue should
+be protected by mutex lock. This could be much more efﬁcient than the sequential
+method due to the reduction of the time to compute intersected neighboring cells.
+Because these operations can be done in parallel. However, the time to push and
+pop in the shared queue is not reduced at all. And this could be a major obstacle
+to improve the contour propagation.
+3.2 Concurrent Propagation
+To avoid long time waiting for execution to access shared queue, we designed an
+algorithm to maintain a shared queue and use local queue in each thread, while use
+a shared queue to avoid the situation of empty queue starvation.
+12
+To prevent duplication when visiting the volume vertices, we maintained a
+shared set between all the threads. Since we just store whether the vertex is visited
+in the set, the type of is simply a bitset. Although it is shared between all the
+threads, it is rarely visited during the propagate progress. Additionally, the bitset
+is initialize as 0 and set to 1 when visiting the cell. Therefore, it’s safe to maintain
+it as a lock free set.
+Algorithm 1: propagate Function
+Input: Isovalue, Initial Seed Cell, ThreadID, Total Number of Threads,
+Initialized Unvisited Bitset
+Output: ActiveCellArray, Parallel Preﬁx Sum(Scan)
+Create LocalQueue;1
+while True do2
+Cell ← dequeue();3
+Get Vertex and FunctionValue of Cell;4
+Compute Index by compare(FunctionValue, Isovalue);5
+ActiveCellArray[ThreadID] ← Cell and Index;6
+foreach intersected adjacent tetrahedron do7
+Ad jacentCell ← GetNeighborCell(Cell);8
+if Ad jacentCell exists & not visited then9
+Visist(Ad jacentCell);10
+enqueue(Ad jacentCell);11
+end12
+end13
+end14
+At the starting point of propagation, one of the threads get a seed cell index.
+To ﬁnd intersection points, sampling current cell vertices and function value and
+comparing the function value to given isovalue to get intersection position. In our
+case of propagating a tetrahedral mesh, four sampled values should compare to
+the isovalue. Then store cell index and intersection information into each thread
+speciﬁc active cell array. This array is later needed as a collection of active cells
+and its information to generate parallel preﬁx sum. Then sample neighboring cells
+13
+with intersection and enqueue it.
+3.2.1 Usage of Local Queue
+The trick to use local queue in each thread for contour propagation, which guaran-
+tees no seed loss, mainly focused on how to get a seed. To describe Algorithm 2
+the following paragraph gives out a summary of the idea:
+To get a cell each time, local queue is visited ﬁrst. And if there is no cell in local
+queue, the thread will announce that it lack of seed cell for further propagation, so
+that other threads might aware this and push a cell into the shared queue. Then go
+on to check out whether all the other local queues are empty. Now that all the local
+queues and shared queue are empty, it means that all the propagation progress is
+ﬁnished and the instance of current thread should be terminated. But if the local
+queue in one of the other threads is not empty, the current thread will go on to the
+next loop to ﬁnd out whether a seed cell is pushed into the shared queue.
+On Line 7 of Algorithm 2, we check the size of shared queue and then de-
+queue it immediately after the check in the same function with lock protection.
+Otherwise, it can’t guarantee there is element while dequeue it from shared queue,
+because the instance of shared queue might be different between the time when
+check the size of the queue and dequeue function is called.
+Consequently, when propagating with a seed cell, the neighboring cells will be
+pushed into local queue if all other threads didn’t make the lack of seed announce-
+ment. Otherwise, the new generated seed should be pushed into the shared queue
+to meet the needs of local queue(s) of other threads.
+14
+Algorithm 2: dequeue Function
+if LocalQueue is not empty then1
+Cell ← LocalQueue front element;2
+Pop(LocalQueue front element);3
+else4
+while True do5
+LackOfSeedFlags[ThreadID]← True;6
+if Cell ←Dequeue(SharedQueue) failed then7
+if all LackOfSeedFlags is False then8
+TerminateCurrentThread();9
+else10
+continue;11
+end12
+else13
+LackOfSeedFlag[ThreadID]← False;14
+break;15
+end16
+end17
+end18
+Algorithm 3: enqueue Function
+if all LackO fSeedFlags is False then1
+LocalQueue ← Push(Ad jacentCell);2
+else3
+SharedQueue ← Push(Ad jacentCell);4
+end5
+3.2.2 Post-processing
+For each active tetrahedron cell in active cell array, there might be one or two
+corresponding triangles, which depends on the intersection position on the tetra-
+hedron. To ﬁnish this step in a efﬁcient way, a simple CUDA kernel was made to
+generate the array for generating mesh in parallel pipeline while avoiding conﬂicts
+between CUDA threads.
+Compare given isovalue with vertices of neighboring cell to get the intersected
+15
+Sequential Parallel
+for j from 1 to n do foreach j in parallel do
+scan[j] = scan[j-1] +
+f(in[j-1]);
+scan[j] = f(in[j]);
+Table 3.1: Comparison of sequential and parallel scan generation
+neighbors next to it, we can get the parallel preﬁx sum [9] of each active voxel. 1
+initial propagate stage
+conﬁct among threads
+propagate with local queue
+Figure 3.2: A typical model of contour propagation in parallel from the an initial
+seed cell (color-tags showing contribution of different threads)
+1http://http.developer.nvidia.com/GPUGems3/gpugems3 ch39.html
+16
+Chapter 4
+GPU-based Triangulation
+Due to the parallel architecture on modern graphics cards, a mount of graphics re-
+lated as well as general purpose applications are developed on top of GPU. Those
+applications might be implemented in shader languages like GLSL or general
+purpose computing languages like OpenCL. And among those implementations,
+NVIDIA’s CUDA architecture is widely used due to the highly optimized CUDA
+libraries and regularly updated SDK. Even many of the modern supercomputers
+consist of thousands of NVIDIA’s GPUs.
+(a) wireframe of active cells (b) shaded mesh
+Figure 4.1: Cell triangulation (only tetrahedral cells with intersection is triangu-
+lated in GPU)
+17
+4.1 Background Research
+For triangulate active cells extracted from a initial seed cell using geometric prop-
+agation method, GPU implementation is a decent choice to consider. C. Dyken
+et al.[7] composed a method to enable MC algorithm running on GPU using
+shader programming while taking the advantages of a data packing structure called
+HistoPyramids.
+Figure 4.2: Difference between CPU and GPU in parallel computing
+Vertex shahder based active cell triangulation [8] focus on the technique to pack
+the active cell data to compact them as small as possible to improve the transfer
+speed. And even intensive values can be transferred to GPU during the rendering
+process. It’s good to render dataset that is large in volume, due to the algorithm
+don’t require a initialize step to put all volume to GPU as texture.
+All of these implementation got a common problem on copying GPU precom-
+puted mesh into main memory to prevent duplicated computations. That is to said
+it will triangulate active cells even when operations like rotation was made. It cost
+much unnecessary GPU computation when using shader programs for triangula-
+tion.
+18
+In general, shader-based triangulation method is much easier to implement,
+but far less efﬁcient comparing to the general-purpose gpu programming methods
+due to the difference of graphics programming implementation. Therefore, it’s the
+limitation of the shader programming method for extracting isosurface[8].
+The following is a comparison between the three widely used GPU program-
+ming APIs:
+• OpenCL: Khronos Group’s OpenCL cross-platform and implemented on
+both Nvidia and AMD’s GPUs. It can be easily ported to multi-core exec-
+tions. However, it is less developed comparing to CUDA.
+• CUDA: Nvida’s CUDA is currently most highly developed GPU program-
+ming architecture. It features in various GPU memory management and
+graphics related interoperabilities. However, it is only availble on Nvidia’s
+graphics cards.
+• DirectCompute: DirectX compatibility, but limited to Microsoft Windows
+7 and Vista.
+Advantage of GPGPU programming : save proceeded data into memory and
+use synchronize method to guarantee to correctness of computing and improve the
+speed further.
+Faster large object rendering method for preventing overhead of calling data
+input functions.
+4.1.1 Parallel Contour Extraction Methods
+C.L. Bajaj et al.[2] designed out-of-core algorithm aim to extract huge dataset us-
+ing a parallel method. Depending on the static analysis information precomputed,
+19
+the algorithm focused on loading balance and minimize secondary memory access.
+A volumetric dataset is divided into the atomic processing elements called block-
+let. Therefore, only cells intersected with a range of isovalue would be loaded into
+main memory. This approach efﬁciently reduced the data loading to avoid visit-
+ing blocklets that don’t contain active cells. Similiar work was done to the GPU
+processing method. Goetz et al.[8] developed the method to carefully compact ac-
+tive cell data as texture and extract the surface using vertex shader. The algorithm
+aim to reduce the data transaction by concatenate the vertex data with a bitwise
+operation, so that small portions in large volume data can be visualized with GPU
+acceleration. However, the performance of this work mainly depend on the speed
+of data transaction to the graphics card.
+4.1.2 Parallelism in CUDA Infrastructure
+Note that an implementation of the Marching Cubes method [10] exist in recent
+version of CUDA SDK. This program takes the advantage of the parallel structure
+of CUDA to extract all of the cells in the given volume data. Although it’s fast
+enough to extract large volume data in real-time, but obviously it won’t be possible
+for this program to process datasets as huge as Giga Bytes. Consequently, active
+cells that are needed to be triangulated should be preprocessed before loading the
+whole volume data into GPU. And a detail solution is given in Chapter 4.
+Figure 4.3 illustrates the relationship between host and graphics device. The
+computing units on each graphics card are divided into serveral grids, and each grid
+consists of a number of blocks, where many threads could be run in parallel. And
+the execution is enabled to assign the work to each block, therefore, it’s efﬁcient
+to use CUDA for the computation of large amount of simple works.
+20
+Figure 4.3: CUDA Execution Model
+4.2 Active Cell Triangulation
+Right after the active cell array is computed, a GPU array can be allocated same
+size of the active cell array, where consist of the continuous indices of tetrahedron
+intersected with given isovalue.
+Note that in order to triangulate the volume data that is larger than GPU mem-
+ory, volume data can be allocated and compacted after active cell array compu-
+tation instead of loading the whole volume. However, this would slow down the
+triangulation time and might be slower than CPU depending on the size of the
+chosen contour.
+Taking the advantage of CUDA’s interoperability with OpenGL1, vertex buffer
+object(VBO) is mapped into the address space of CUDA before launching triangu-
+lation computation kernel. And right after the CUDA triangulation, buffer object
+is unmapped from device memory address. 2
+There are three tables that can be loaded as texture3. One is the triangle table
+1In fact, Direct3D interoperability is also available. In our implementation, to enable the program
+both in Win32 and Linux, OpenGL functions are used.
+2Note that a buffer object must be registered to CUDA before it can be mapped. This is done
+with cudaGLRegisterBufferObject function.
+3However, for tables that are small in size, it’s good to put it directed into device memory for
+21
+that maps same tetrahedron vertex index to a list of up to 2 triangles which are
+built from interpolated edge vertices. And in the case of triangulation on a single
+cube, there would be up to 5 triangles. The reason cubic data in the volume are
+divided into tetrahedron is mainly because of the ambiguity problem when building
+the contour tree. Dividing the cube avoids the ambiguity problem and guarantees
+the topology equivalent property between the contour tree and volume data. Two
+other tables are an edge table which is used for mapping vertices to edges that
+are intersected and a cube dividing table which is used for storing tetrahedron
+connectivity information in a cube.
+The most difﬁcult problem to the triangulation tetrahedron cell is how to orga-
+nize vertex index and and put interpolated information into global memory without
+conﬂict. To solve this problem, cell intersection on edges are estimated after com-
+bining active cell in CPU.
+With compact array (parallel preﬁx sum), we perform linear interpolation on
+each interect edge of all active cells.
+For Surface smoothing, surface normal is computed during the triangulation
+process. In our implementation, we use Gouraud shading method for balance the
+fast processing and rendering quality. The computation of Gouraud shading pro-
+duces continuous shading of surfaces by estimating surface normal of each vertex
+in the polygonal 3D model. The normal on each vertex are set to be the average
+value of all neighboring vertices.
+high speed of access during execution.
+22
+4.3 VBO-based Rendering
+There are several reasons to apply VBO rendering to the implementation: First, it
+is a time-consuming task to cost memory data from GPU to main memory. Second,
+glVertex* has the potential to be slower, because there is more call overhead than
+glDrawElements. Further more, it’s duplicate data transfer between main memory
+and GPU.
+Due to the usage of parallel preﬁx sum in our method, the GPU memory to
+put all triangles are allocated as vertex buffer object(commonly known as VBO)
+immediately after the current propagation stage. This section of global memory
+in GPU is then ﬁlled with triangulated mesh data during GPU-based triangulation.
+VBO is used to reduce of avoid large amount of function calling while rendering
+triangulated mesh and reduce data transfer from between GPU and CPU.
+23
+Chapter 5
+Results
+In our tests, we used a Linux system (Debian 6.0 Distribution) equipped with Dual
+Core CPU running at 2.66 GHz, 3GB RAM, as well as a 512MB GeForce graphics
+card. The graphics card is enabled with CUDA version 1.1. The graphics card
+speciﬁc CUDA compute capability table are available on the Nvidia’s ofﬁcial site1.
+Test images are vary from molecule data to large scan medical image volume data,
+many of which were provided on http://www.volvis.org.
+fuel hemoglobin ventricle kidney hipip
+data set
+0
+1
+2
+3
+4
+5
+6
+7
+timecost
+A Comparison of Contour Extraction Performance
+Sequential
+Hybrid Accelerated
+Figure 5.1: A performance comparison between conventional sequential program
+and the composed hybrid accelerated method. (executed on Linux environment
+with a Intel E5300 and a Nvidia GT9500 graphics card)
+1http://developer.nvidia.com/cuda-gpus
+24
+Figure 5.2: Surface of kidney is clearly shown with support of alpha blending,
+while noisy structures are signiﬁcantly removed.
+In this thesis, a comparison on performance is made between conventional ap-
+proach and the composed new method. The result can be vary depending on many
+limitation of hardware such as bandwidth between CPU and GPU, the number
+of cores exists in CPU or GPU. However, on most modern computers equipped
+with Nvidia’s GPU, relevant fast contour visualization is achieved as is shown in
+Figure 5.1.
+5.1 Propagation Performance
+Here we make a comparison between our computation results with original se-
+quential method. It’s not hard to ﬁnd out the speed improvement from Table 5.1.
+The performance highly depends on the usage of threads, but too many thread us-
+age will lead to overhead global queue usage. Consequently, the number of threads
+is usually conﬁgured as many as the number of cores in the CPU to get best per-
+formance on the computer.
+Results shown in Figure 5.3 indicate that the proposed algorithm is efﬁcient
+in assigning work to different threads. Most of the active cells are continuous
+because they are extracted using the same seed cell. The active cells extracted by
+25
+(a) front (b) back (c) side
+Figure 5.3: A contour component extracted from engine image data, where color
+shows contribution of different processors.
+all threads are almost equal except for some rare cases when conﬂict among threads
+take place. The conﬂict might take place on the beginning of the propagation due
+to the starvation among the number of threads. As is shown on Figure 3.2 and
+Figure 5.4a, starting from the seed on the center, there is a short period time that
+threads competency is very high. On the other hand, however, for small contours
+that extracted using the algorithm, the propagation time might be ﬁnished within a
+single thread.
+(a) color-tagged (b) shaded
+Figure 5.4: Comparison between (5.4b) shaded contour component and (5.4a)
+color-tagged model, where slight thread conﬂict take place during initial propa-
+gation.
+From Figure 5.5 we can see that when using a dual-core processor, best per-
+formance can be obtained when using 3∼5 threads. For the propagation of a large
+26
+0.2
+0.3
+0.4
+0.5
+0.6
+timecost(unit:second)
+0 2 4 6 8 10 12 14 16 18
+number of threads
+Multi-threading Contour Propagation Performance
+Dual-core (Intel E5300)
+Quad-core (Intel i5)
+Figure 5.5: Multi-threading contour propagation performance tested on
+hemoglobin data. (y axis shows time to obtain 1,237,574 tetrahedral cells, while
+lines show ﬁtting function: f(x) = α
+xβ+βx+γ
++δarctan(εx+ζ)+η
+contour, the speedup is much more efﬁcient using threads more than the number
+of processors. This mainly because when conﬂict take place between two threads,
+the existence of other threads can continue to propagate. Therefore, the number of
+threads used in 1.5 times of that of cores to estimate best performance based on the
+available hardware. The ﬁgure also shows that starting from using a single thread,
+with the increase of thread use, the time for propagting dropped gradually due to
+the multi-tasking function on different computing units. The drop after obtaining
+best performance is contributed by overhead host function calling and too much
+threads compete to get seeds from shared queue. But for contours small in size,
+it’s efﬁcient to use threads same as the number of processors.
+27
+5.2 Triangulation Performance
+GPU performance could be slightly affactted by serveral factors, such as the dis-
+tribution of the GPU processing load, the bandwidth between GPU and CPU, as
+well as memory size in graphics cards.
+load balancing The distribution of the GPU processing load is assigned by set-
+ting the number of threads used in each block, which is a multiple of 2. In our
+experiment, it’s proper to set the value in range from 32 to 128. That is to say that
+each block processes 32∼128 tetrahedral cells at a time, while each cell results in
+1∼2 triangles. Taking advantage of the vertex buffer object(VBO), all these tri-
+angles in the device addresses can be mapped into rendering pipeline by binding
+buffer IDs and enable the vertex buffer in display function.
+The amount of work that assigned to each thread are slightly different because
+the number of triangles inside a tetrahedron can be 1 or 2 depending on the inter-
+section case. The time cost on execution depends on the slowest thread. Therefore,
+the time cost in most case is the time consumed on extracting two triangules inter-
+sected in a single cell.
+bandwidth From Table 5.1, we can see that bandwidth is an important factor
+affacting the GPU computing performance. Active cells collected using multi-
+tasking should be copied into GPU memory, which is allocated and released every
+time. Therefore, data that need to be loaded should be small in size and in less
+frequency. In our experiment, computing cell index on intersection is much more
+efﬁcient than loading precomputed array. Because the computation on GPU is
+executed on parallel pipeline, while loading arrays to global memory is run in
+linear time complexity O(n).
+28
+miscellaneous In practice, CUDA SDK version is another factor that affacts the
+ﬁnal triangulation performance. Newer versioned toolkit might be much more
+optimized to achieve better performance.
+29
+datasetdimensiontrianglesactivecellssequential2threads4threadsCUDA
+fuel64x64x6433618256130.019s0.011s0.012s0.0011+0.000030+0.0008
+vh4128x128x1284711073579860.271s0.149s0.150s–
+head128x128x1285738404368700.331s0.219s0.186s–
+kidney128x128x1287693055869560.452s0.287s0.257s0.0135+0.000031+0.0082
+hemoglobin128x128x128161939212351330.929s–0.513s0.0267+0.000048+0.0169
+ventricle256x256x1286431714912640.372s–0.212s0.0114+0.000051+0.0066
+engine256x256x128206055215614631.201s–0.676s–
+Table5.1:PerformanceAnalyzingTable(datainCUDAshowstheallocationtime,executiontimeandmemoryreleasingtime
+respectively.)
+30
+(a) fuel
+(b) head
+(c) engine
+Figure 5.6: Final results
+31
+(a) visible human
+(b) kidney
+(c) hemoglobin
+Figure 5.7: Final results
+32
+Chapter 6
+Conclusions and Future Works
+This thesis aim to take the advantage of modern hardware to extract the interesting
+information in 3D volume data. To address the problem of ﬁnding contours of in-
+terest, we construct contour tree and use it as the visual representation of the data.
+To apply the method to large data with noisy structures, hierarchical simpliﬁcation
+algorithm is applied the the contour tree. Hence, an interface is created to enable
+the interaction to map the structure to surface mesh. The hybrid algorithm pro-
+posed in this thesis improved the mapping action signiﬁcantly by threaded propa-
+gation in CPU and GPU accelerated triangulation.
+The reason to use CPU for the propagating operation mainly because it is im-
+plemented with heavy conditional controls. Multi-core CPUs got its advantage to
+manage these operation with highly developed thread synchronization functions,
+which is not yet enabled in GPU programming.
+In this thesis, an assumption was made that the input data should be simplicial
+mesh. The application is limited to result in rectangular geometry mesh.
+We want to continue this work by using more statistical information in the vol-
+ume data to show salient contours in an interactive way. Besides, view-dependent
+33
+method can be applied to improve the extraction speed by propagating only the
+surface face to the view-point. Other future improvements include the possible to
+implement efﬁcient propagation method on GPU and developing proper volume
+dividing method to enable the application to large dataset.
+34
+Bibliography
+[1] C.L. Bajaj, V. Pascucci, and D.R. Schikore. The contour spectrum. In Pro-
+ceedings of the 8th conference on Visualization’97, pages 167–ff. IEEE Com-
+puter Society Press, 1997.
+[2] CL Bajaj, V. Pascucci, D. Thompson, and XY Zhang. Parallel acceler-
+ated isocontouring for out-of-core visualization. In Proceedings of the 1999
+IEEE symposium on Parallel visualization and graphics, pages 97–104. IEEE
+Computer Society, 1999.
+[3] H. Carr, J. Snoeyink, and U. Axen. Computing contour trees in all dimen-
+sions. In Proceedings of the eleventh annual ACM-SIAM symposium on Dis-
+crete algorithms, pages 918–926. Society for Industrial and Applied Mathe-
+matics, 2000.
+[4] H. Carr, J. Snoeyink, and M. van de Panne. Simplifying ﬂexible isosurfaces
+using local geometric measures. In Proceedings of the conference on Visual-
+ization’04, pages 497–504. IEEE Computer Society, 2004.
+[5] H. Carr, J. Snoeyink, and M. van de Panne. Flexible isosurfaces: Simpli-
+fying and displaying scalar topology using the contour tree. Computational
+Geometry, 43(1):42–58, 2010.
+35
+[6] R.A. Drebin, L. Carpenter, and P. Hanrahan. Volume rendering. In ACM
+Siggraph Computer Graphics, volume 22, pages 65–74. ACM, 1988.
+[7] C. Dyken, G. Ziegler, C. Theobalt, and H.P. Seidel. High-speed marching
+cubes using histopyramids. In Computer Graphics Forum, volume 27, pages
+2028–2039. Wiley Online Library, 2008.
+[8] F. Goetz, T. Junklewitz, and G. Domik. Real-time marching cubes on the
+vertex shader. In Proceedings of Eurographics, volume 2005, page 2, 2005.
+[9] M. Harris, S. Sengupta, and J.D. Owens. Parallel preﬁx sum (scan) with
+cuda. GPU Gems, 3(39):851–876, 2007.
+[10] NVIDIA CUDA SDK Graphics Interop. Marching cubes isosurfaces.
+http://developer.download.nvidia.com/.
+[11] G. Kindlmann and J.W. Durkin. Semi-automatic generation of transfer func-
+tions for direct volume rendering. In Proceedings of the 1998 IEEE sympo-
+sium on Volume visualization, pages 79–86. ACM, 1998.
+[12] J. Kr¨uger and R. Westermann. Acceleration techniques for gpu-based volume
+rendering. IEEE Computer Society, 2003.
+[13] W.E. Lorensen and H.E. Cline. Marching cubes: A high resolution 3d surface
+construction algorithm. ACM Siggraph Computer Graphics, 21(4):163–169,
+1987.
+[14] J. Pal Singh, A. Gupta, and M. Levoy. Parallel visualization algorithms:
+Performance and architectural implications. Computer, 27(7):45–55, 1994.
+36
+[15] V. Pascucci and K. Cole-McLaughlin. Efﬁcient computation of the topology
+of level sets. In Proceedings of the conference on Visualization’02, pages
+187–194. IEEE Computer Society, 2002.
+[16] V. Pascucci, K. Cole-McLaughlin, and G. Scorzelli. Multi-resolution com-
+putation and presentation of contour trees. In Proceedings of the IASTED
+conference on Visualization, Imaging, and Image Processing. VIIP, 2004.
+[17] B.S. Sohn and C. Bajaj. Time-varying contour topology. Visualization and
+Computer Graphics, IEEE Transactions on, 12(1):14–25, 2006.
+[18] R.E. Tarjan. Efﬁciency of a good but not linear set union algorithm. Journal
+of the ACM (JACM), 22(2):215–225, 1975.
+[19] M. Van Kreveld, R. Van Oostrum, C. Bajaj, V. Pascucci, and D. Schikore.
+Contour trees and small seed sets for isosurface traversal. In Proceedings
+of the thirteenth annual symposium on Computational geometry, pages 212–
+220. ACM, 1997.
+[20] J. Zhou, M. Takatsuka, and University of Sydney. School of Informa-
+tion Technologies. Contour tree simpliﬁcation based on a combined ap-
+proach. School of Information Technologies, University of Sydney, 2008.
+37
+국문초록
+본 논문은 컴퓨터보조진단분야에서 질병의 진단및 치료를 하거나 특정한
+특징을 찾기 위해 의료영상의 관심영역(ROI)을 분석하는 것은 중요하다. 특
+히 다양한 의료용 응용프로그램들을 이용하여 2D나 3D 이미지 데이터들로
+부터 암의 경계를 찾거나 그 크기를 측정할 수 있다.
+실제로 의료영상 분석시 3D 컨투어 컴포넌트의 크기가 매우 큰 경우가 많
+으며 이 경우 삼각화 및 컨투어의 전파를 하는데 많은 시간을 소요된다. 본
+논문은 이러한 문제들을 해결하기 위하여 컨투어 트리를 계산하고 단순화하
+였으며 멀티코어CPU와 다중코어GPU를 동시에 이용한 혼합 가속화 방방을
+제안하였다. 이 혼합 가속화 방법은 각각의 장점을 이용하여 관심영역을 빠
+르게 추출할 수 있었다.
+키위드: 멀티 쓰레딩, CUDA, 컨투어 트리, 등위면, 컨투어 컴포넌트
+ABSTRACT
+In the vision of Computer Aided Diagnosis(CAD), to ﬁnd and treat speciﬁc
+illness, ROI (Region of Interest) analyze is an important methodology for ﬁnding
+special characteristics. Particularly, for 2D (an image) and 3D (a volume) datasets,
+many medical applications are designed to draw the boundaries of a tumor for
+measuring its size.
+In practical study of medical imaging, surface of a speciﬁc 3D contour might
+be very huge. And it would be time-consuming task to propagate the contour and
+triangulate it into regular mesh. This thesis presents a series of methods from
+computing the contour tree to the simpliﬁcation method. And then, taking the
+advantage of both multi-core CPU and many-core GPU, boundary of interest can
+be extracted with a hybrid accelerated method.
+Keywords: Multi-threading, CUDA, Contour Tree, Isosurface, Contour Component
+Keywords: Multi-threading, CUDA, Contour Tree, Isosurface, Contour Component
+
+
+ LocalWords:  tured

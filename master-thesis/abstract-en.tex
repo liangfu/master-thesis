@@ -1,0 +1,51 @@
+\documentclass[11pt,b5paper]{article}
+% \usepackage{ucs}
+% \usepackage{utf8x}
+% \usepackage[utf8]{inputenc}
+% \usepackage[10pt]{type1ec}          % use only 10pt fonts
+% \usepackage{CJK}
+% \usepackage[T1]{fontenc}
+% \usepackage{pshan}
+% \usepackage{hangul}
+% \usepackage{hfont}
+\usepackage{pslatex}
+% \usepackage[margin=2in]{geometry}
+\usepackage{setspace}
+% \singlespacing{}
+\onehalfspacing{}
+% \doublespacing{}
+\usepackage[margin=2.5cm]{geometry}
+\pdfpagewidth 18cm
+\pdfpageheight 25.5cm
+
+% \newenvironment{Korean}{%
+%   \CJKfamily{mj}}{}
+
+\title{\huge{ABSTRACT}}
+\date{}
+
+
+\begin{document}
+\maketitle{}
+% \thispagestyle{empty}
+\setcounter{page}{39}
+In the vision of Computer Aided Diagnosis(CAD), to find and treat specific
+illness, ROI (Region of Interest) analyze is an important methodology for
+finding special characteristics. Particularly, for 2D (an image) and 3D
+(a volume) datasets, many medical applications are designed to draw the
+boundaries of a tumor for measuring its size.
+
+In practical study of medical imaging, surface of a specific 3D contour might
+be very huge. And it would be time-consuming task to propagate the contour and
+triangulate it into regular mesh. This thesis presents a series of methods
+from computing the contour tree to the simplification method. And then, taking
+the advantage of both multi-core CPU and many-core GPU, boundary of interest
+can be extracted with a hybrid accelerated method.
+\vfill{}
+\noindent\rule{\linewidth}{0.2mm}
+
+\noindent\small{\textbf{Keywords}: \textit{Multi-threading, CUDA, Contour Tree, Isosurface, Contour Component}}
+
+
+
+\end{document}

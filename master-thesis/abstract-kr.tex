@@ -1,0 +1,47 @@
+\documentclass[11pt, b5paper]{article}
+% \usepackage{ucs}
+% \usepackage{utf8x}
+% \usepackage[utf8]{inputenc}
+% \usepackage[10pt]{type1ec}          % use only 10pt fonts
+% \usepackage{CJK}
+% \usepackage[T1]{fontenc}
+% \usepackage{pshan}
+\usepackage{kotex}
+\usepackage{setspace}
+% \usepackage{hfont}
+% \usepackage{pslatex}
+
+% \newenvironment{Korean}{%
+%   \CJKfamily{mj}}{}
+\usepackage[margin=2.5cm]{geometry}
+\pdfpagewidth 18cm
+\pdfpageheight 25.5cm
+
+\onehalfspacing
+
+\title{\huge{국문초록}}
+\date{}
+
+\begin{document}
+\maketitle{}
+% \thispagestyle{empty}
+\setcounter{page}{38}
+  본 논문은 컴퓨터보조진단분야에서 질병의 진단및 치료를 하거나 특정한
+특징을 찾기 위해 의료영상의 관심영역(ROI)을 분석하는 것은 중요하다. 특
+히 다양한 의료용 응용프로그램들을 이용하여 2D나 3D 이미지 데이터들로
+부터 암의 경계를 찾거나 그 크기를 측정할 수 있다.
+
+  실제로 의료영상 분석시 3D 컨투어 컴포넌트의 크기가 매우 큰 경우가 많
+으며 이 경우 삼각화 및 컨투어의 전파를 하는데 많은 시간을 소요된다. 본
+논문은 이러한 문제들을 해결하기 위하여 컨투어 트리를 계산하고 단순화하
+였으며 멀티코어CPU와 다중코어GPU를 동시에 이용한 혼합 가속화 방방을
+제안하였다. 이 혼합 가속화 방법은 각각의 장점을 이용하여 관심영역을 빠
+르게 추출할 수 있었다.
+\vfill{}
+\noindent\rule{\linewidth}{0.2mm}
+
+\noindent\small{\textbf{키위드}: \textit{멀티 쓰레딩, CUDA, 컨투어 트리, 등위면, 컨투어 컴포넌트}}
+
+
+
+\end{document}
